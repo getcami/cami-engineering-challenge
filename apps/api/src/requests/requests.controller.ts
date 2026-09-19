@@ -17,8 +17,7 @@ import { ClassifyRequestDto } from '../classifications/dto/classify-request.dto'
 import { HistoryQueryDto } from '../classifications/dto/history-query.dto';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
-import { CustomerRequest } from './customer-request.entity';
-import { RequestListItem, RequestsService } from './requests.service';
+import { RequestDetail, RequestListItem, RequestsService } from './requests.service';
 
 /**
  * HTTP layer only: parse/validate input (DTOs + pipes), delegate, return.
@@ -53,12 +52,12 @@ export class RequestsController {
   }
 
   @Get(':id')
-  getOne(@Param('id', ParseUUIDPipe) id: string): Promise<CustomerRequest> {
+  getOne(@Param('id', ParseUUIDPipe) id: string): Promise<RequestDetail> {
     return this.requestsService.getById(id);
   }
 
   @Post()
-  create(@Body() dto: CreateRequestDto): Promise<CustomerRequest> {
+  create(@Body() dto: CreateRequestDto): Promise<RequestDetail> {
     return this.requestsService.create(dto.message);
   }
 
@@ -66,7 +65,7 @@ export class RequestsController {
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStatusDto,
-  ): Promise<CustomerRequest> {
+  ): Promise<RequestDetail> {
     return this.requestsService.updateStatus(id, dto.status);
   }
 }
