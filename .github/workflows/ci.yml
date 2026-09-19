@@ -59,10 +59,14 @@ jobs:
       - name: Test
         run: npm test
 
+      # Uses the job-level DATABASE_URL. The service container only creates the
+      # `cami` database, so pointing this step anywhere else cannot connect.
       - name: Migrate
-        env:
-          DATABASE_URL: postgres://cami:cami@localhost:5432/cami_app
         run: npm run migration:run
+
+      # Catches seed/migration drift (e.g. a column the seed writes that no migration adds).
+      - name: Seed
+        run: npm run seed
 
       - name: Build
         run: npm run build
