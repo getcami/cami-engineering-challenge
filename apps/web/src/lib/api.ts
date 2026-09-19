@@ -2,6 +2,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export type RequestStatus = 'open' | 'in_progress' | 'resolved';
 
+export const CLASSIFICATION_CATEGORIES = ['support', 'sales', 'billing', 'unknown'] as const;
+export type ClassificationCategory = (typeof CLASSIFICATION_CATEGORIES)[number];
+
 export type RequestListItem = {
   id: string;
   message: string;
@@ -80,7 +83,22 @@ export async function updateRequestStatus(
   return res.json();
 }
 
-export async function classifyMessage(message: string, requestId?: string) {
+export type ClassificationRecord = {
+  id: string;
+  requestId: string | null;
+  message: string;
+  category: ClassificationCategory;
+  confidence: number;
+  rawCategory: ClassificationCategory;
+  rawConfidence: number;
+  provider: string;
+  createdAt: string;
+};
+
+export async function classifyMessage(
+  message: string,
+  requestId?: string,
+): Promise<ClassificationRecord> {
   const res = await fetch(`${API_URL}/requests/classify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -92,9 +110,27 @@ export async function classifyMessage(message: string, requestId?: string) {
   return res.json();
 }
 
-export async function fetchHistory(category?: string) {
-  const qs = category ? `?category=${encodeURIComponent(category)}` : '';
-  const res = await fetch(`${API_URL}/requests/history${qs}`);
+export type HistoryFilter = {
+  category?: ClassificationCategory;
+  limit?: number;
+  offset?: number;
+};
+
+export type HistoryPage = {
+  items: ClassificationRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export async function fetchHistory(filter: HistoryFilter = {}): Promise<HistoryPage> {
+  const params = new URLSearchParams();
+  if (filter.category) params.set('category', filter.category);
+  if (filter.limit != null) params.set('limit', String(filter.limit));
+  if (filter.offset != null) params.set('offset', String(filter.offset));
+
+  const qs = params.toString();
+  const res = await fetch(`${API_URL}/requests/history${qs ? `?${qs}` : ''}`);
   if (!res.ok) {
     throw await failure(res, 'Failed to load history');
   }

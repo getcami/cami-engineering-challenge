@@ -194,7 +194,7 @@ export default function HomePage() {
       {classifyMutation.isSuccess && (
         <p className="text-sm text-slate-600">
           Classified as <span className="font-medium">{classifyMutation.data.category}</span>{' '}
-          ({classifyMutation.data.confidence.toFixed(2)}).
+          ({classifyMutation.data.confidence.toFixed(2)}) via {classifyMutation.data.provider}.
         </p>
       )}
     </div>

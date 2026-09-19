@@ -1,14 +1,13 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ClassificationsModule } from '../classifications/classifications.module';
 import { CustomerRequest } from './customer-request.entity';
-import { RequestNote } from './request-note.entity';
 import { RequestsController } from './requests.controller';
 import { RequestsService } from './requests.service';
-import { KeywordClassifier } from './keyword-classifier';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([CustomerRequest, RequestNote])],
+  imports: [TypeOrmModule.forFeature([CustomerRequest]), ClassificationsModule],
   controllers: [RequestsController],
-  providers: [RequestsService, KeywordClassifier],
+  providers: [RequestsService],
 })
 export class RequestsModule {}

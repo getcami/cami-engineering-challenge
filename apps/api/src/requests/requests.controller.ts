@@ -3,100 +3,70 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
 } from '@nestjs/common';
-import { RequestsService } from './requests.service';
-import { KeywordClassifier } from './keyword-classifier';
-import { RequestStatus } from './customer-request.entity';
+import {
+  ClassificationHistoryPage,
+  ClassificationRecord,
+  ClassificationsService,
+} from '../classifications/classifications.service';
+import { ClassifyRequestDto } from '../classifications/dto/classify-request.dto';
+import { HistoryQueryDto } from '../classifications/dto/history-query.dto';
+import { CreateRequestDto } from './dto/create-request.dto';
+import { UpdateStatusDto } from './dto/update-status.dto';
+import { CustomerRequest } from './customer-request.entity';
+import { RequestListItem, RequestsService } from './requests.service';
 
+/**
+ * HTTP layer only: parse/validate input (DTOs + pipes), delegate, return.
+ * Business rules live in RequestsService / ClassificationsService /
+ * classification-policy; validation failures are 400s from the global
+ * ValidationPipe rather than `{ error }` bodies with a 200.
+ *
+ * Route order matters: the static routes (`history`, `classify`) are declared
+ * before `:id` so they are never captured as an id. ParseUUIDPipe on `:id` is a
+ * second line of defence: a mis-ordered route would fail loudly with a 400.
+ */
 @Controller('requests')
 export class RequestsController {
   constructor(
     private readonly requestsService: RequestsService,
-    private readonly classifier: KeywordClassifier,
+    private readonly classificationsService: ClassificationsService,
   ) {}
 
   @Get()
-  list() {
+  list(): Promise<RequestListItem[]> {
     return this.requestsService.list();
   }
 
   @Get('history')
-  history(@Query('category') _category?: string) {
-    return {
-      items: [],
-      message: 'Classification history is not implemented yet.',
-    };
+  history(@Query() query: HistoryQueryDto): Promise<ClassificationHistoryPage> {
+    return this.classificationsService.history(query);
+  }
+
+  @Post('classify')
+  classify(@Body() dto: ClassifyRequestDto): Promise<ClassificationRecord> {
+    return this.classificationsService.classify(dto);
   }
 
   @Get(':id')
-  getOne(@Param('id') id: string) {
+  getOne(@Param('id', ParseUUIDPipe) id: string): Promise<CustomerRequest> {
     return this.requestsService.getById(id);
   }
 
   @Post()
-  create(@Body() body: { message?: string }) {
-    if (!body?.message || typeof body.message !== 'string') {
-      return { error: 'message is required' };
-    }
-    return this.requestsService.create(body.message);
+  create(@Body() dto: CreateRequestDto): Promise<CustomerRequest> {
+    return this.requestsService.create(dto.message);
   }
 
   @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() body: { status?: RequestStatus }) {
-    if (!body?.status) {
-      return { error: 'status is required' };
-    }
-    return this.requestsService.updateStatus(id, body.status);
-  }
-
-  /**
-   * Classify a customer request. Business rules currently live in the controller.
-   */
-  @Post('classify')
-  async classify(@Body() body: any) {
-    const message = body?.message;
-    if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return { error: 'message must be a non-empty string' };
-    }
-
-    if (message.length > 2000) {
-      return { error: 'message too long' };
-    }
-
-    const trimmed = message.trim();
-    let result = this.classifier.classify(trimmed);
-
-    // Soften confidence for very short messages.
-    if (trimmed.split(/\s+/).length < 3 && result.category !== 'unknown') {
-      result = {
-        category: result.category,
-        confidence: Math.max(0.5, result.confidence - 0.15),
-      };
-    }
-
-    // Prefer "unknown" when confidence is weak.
-    if (result.confidence < 0.55) {
-      result = { category: 'unknown', confidence: result.confidence };
-    }
-
-    const requestId = body.requestId as string | undefined;
-    if (requestId) {
-      const existing: any = await this.requestsService.getById(requestId);
-      existing.category = result.category;
-      existing.confidence = result.confidence;
-      if (existing.status === 'open') {
-        existing.status = 'in_progress';
-      }
-      await this.requestsService.save(existing);
-    }
-
-    return {
-      category: result.category,
-      confidence: result.confidence,
-      requestId: requestId ?? null,
-    };
+  updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateStatusDto,
+  ): Promise<CustomerRequest> {
+    return this.requestsService.updateStatus(id, dto.status);
   }
 }

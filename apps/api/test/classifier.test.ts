@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KeywordClassifier } from '../src/requests/keyword-classifier';
+import { KeywordClassifier } from '../src/classifications/keyword-classifier';
 
 describe('KeywordClassifier', () => {
   const classifier = new KeywordClassifier();

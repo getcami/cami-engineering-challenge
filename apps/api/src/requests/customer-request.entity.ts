@@ -8,7 +8,8 @@ import {
 } from 'typeorm';
 import { RequestNote } from './request-note.entity';
 
-export type RequestStatus = 'open' | 'in_progress' | 'resolved';
+export const REQUEST_STATUSES = ['open', 'in_progress', 'resolved'] as const;
+export type RequestStatus = (typeof REQUEST_STATUSES)[number];
 
 @Entity({ name: 'customer_requests' })
 export class CustomerRequest {

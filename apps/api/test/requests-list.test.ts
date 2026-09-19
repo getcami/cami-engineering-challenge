@@ -110,4 +110,9 @@ describe.skipIf(!HAS_DATABASE)('GET /requests (integration)', () => {
     // The original implementation issued 1 + 150 queries here.
     expect(t.queryLog()).toHaveLength(1);
   });
+
+  it('is not shadowed by :id routes ("history" is a route, not an id)', async () => {
+    await request(t.app.getHttpServer()).get('/requests/history').expect(200);
+    await request(t.app.getHttpServer()).get('/requests/not-a-uuid').expect(400);
+  });
 });

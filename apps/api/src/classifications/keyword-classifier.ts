@@ -1,18 +1,17 @@
 import { Injectable } from '@nestjs/common';
+import { ClassificationResult, ClassifierProvider } from './classifier.provider';
 
-export type ClassificationCategory = 'support' | 'sales' | 'billing' | 'unknown';
-
-export type ClassificationResult = {
-  category: ClassificationCategory;
-  confidence: number;
-};
+export type { ClassificationCategory, ClassificationResult } from './classifier.provider';
 
 /**
- * Deterministic keyword classifier. Candidates may introduce a provider
- * interface and swap implementations (including a future LLM provider).
+ * Deterministic keyword classifier. This is the default ClassifierProvider; an
+ * LLM-backed provider can replace it by binding a different class to
+ * CLASSIFIER_PROVIDER in ClassificationsModule.
  */
 @Injectable()
-export class KeywordClassifier {
+export class KeywordClassifier implements ClassifierProvider {
+  readonly name = 'keyword-v1';
+
   classify(message: string): ClassificationResult {
     const text = message.toLowerCase();
 

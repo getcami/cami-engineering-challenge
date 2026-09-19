@@ -3,6 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Client } from 'pg';
 import { DataSource, Logger } from 'typeorm';
+import { CLASSIFIER_PROVIDER, ClassifierProvider } from '../../src/classifications/classifier.provider';
 import { createDataSource } from '../../src/data-source';
 
 /**
@@ -36,7 +37,7 @@ export type TestApp = {
   close: () => Promise<void>;
 };
 
-export async function createTestApp(): Promise<TestApp> {
+export async function createTestApp(options: { provider?: ClassifierProvider } = {}): Promise<TestApp> {
   const baseUrl = process.env.DATABASE_URL;
   if (!baseUrl) {
     throw new Error('DATABASE_URL is required for integration tests');
@@ -59,7 +60,11 @@ export async function createTestApp(): Promise<TestApp> {
 
   // Imported lazily: AppModule reads DATABASE_URL when it is first loaded.
   const { AppModule } = await import('../../src/app.module');
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  let builder = Test.createTestingModule({ imports: [AppModule] });
+  if (options.provider) {
+    builder = builder.overrideProvider(CLASSIFIER_PROVIDER).useValue(options.provider);
+  }
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication();
   await app.init();
 
