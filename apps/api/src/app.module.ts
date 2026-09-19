@@ -1,17 +1,16 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RequestsModule } from './requests/requests.module';
-import { CustomerRequest } from './requests/customer-request.entity';
-import { RequestNote } from './requests/request-note.entity';
+import { databaseUrl, ENTITIES, loggingOptions } from './database/database.config';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot({
       type: 'postgres',
-      url: process.env.DATABASE_URL ?? 'postgres://cami:cami@localhost:5432/cami',
-      entities: [CustomerRequest, RequestNote],
+      url: databaseUrl(),
+      entities: ENTITIES,
       synchronize: false,
-      logging: ['query'],
+      logging: loggingOptions(),
     }),
     RequestsModule,
   ],
