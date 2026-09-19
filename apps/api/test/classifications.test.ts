@@ -238,6 +238,79 @@ describe.skipIf(!HAS_DATABASE)('classification (integration)', () => {
       expect(messages).toEqual([5, 4, 3, 2, 1].map((n) => `message number ${n}`));
     });
 
+    describe('search and date-range filters', () => {
+      const messagesFor = async (qs: string) =>
+        ((await http.get(`/requests/history${qs}`).expect(200)).body.items as { message: string }[]).map(
+          (i) => i.message,
+        );
+      const backdate = (message: string, iso: string) =>
+        t.dataSource.query(`UPDATE classifications SET created_at = $2 WHERE message = $1`, [message, iso]);
+
+      it('search is case-insensitive "contains"', async () => {
+        await classify('Please send the Invoice', 'billing');
+        await classify('Interested in a demo', 'sales');
+
+        expect(await messagesFor('?search=invoice')).toEqual(['Please send the Invoice']);
+        expect(await messagesFor('?search=INTERESTED')).toEqual(['Interested in a demo']);
+        expect(await messagesFor('?search=nothing-matches')).toEqual([]);
+      });
+
+      it('treats % and _ in the search text literally, not as wildcards', async () => {
+        await classify('Discount of 50% applied', 'billing');
+        await classify('Discount of 50 dollars applied', 'billing');
+        await classify('File name is a_b.txt', 'support');
+        await classify('File name is aXb.txt', 'support');
+
+        expect(await messagesFor('?search=50%25')).toEqual(['Discount of 50% applied']); // %25 = "%"
+        expect(await messagesFor('?search=a_b')).toEqual(['File name is a_b.txt']);
+      });
+
+      it('ignores a blank search', async () => {
+        await classify('one message here', 'billing');
+        expect(await messagesFor('?search=%20%20')).toEqual(['one message here']);
+      });
+
+      it('combines search with category', async () => {
+        await classify('invoice question', 'billing');
+        await classify('invoice for sales', 'sales');
+        expect(await messagesFor('?search=invoice&category=sales')).toEqual(['invoice for sales']);
+      });
+
+      it('from is inclusive and to is exclusive (half-open range)', async () => {
+        await classify('jan 1st', 'billing');
+        await classify('jan 2nd', 'billing');
+        await classify('jan 3rd', 'billing');
+        await backdate('jan 1st', '2026-01-01T00:00:00Z');
+        await backdate('jan 2nd', '2026-01-02T00:00:00Z');
+        await backdate('jan 3rd', '2026-01-03T00:00:00Z');
+
+        // [Jan 2, Jan 3): includes the 2nd, excludes the 3rd.
+        expect(await messagesFor('?from=2026-01-02T00:00:00Z&to=2026-01-03T00:00:00Z')).toEqual(['jan 2nd']);
+        // Open-ended on either side.
+        expect(await messagesFor('?from=2026-01-02T00:00:00Z')).toEqual(['jan 3rd', 'jan 2nd']);
+        expect(await messagesFor('?to=2026-01-02T00:00:00Z')).toEqual(['jan 1st']);
+      });
+
+      it('reports total for the filtered set, independent of the page size', async () => {
+        for (let i = 1; i <= 3; i += 1) await classify(`match number ${i}`, 'billing');
+        await classify('something else entirely', 'billing');
+
+        const res = await http.get('/requests/history?search=match&limit=2').expect(200);
+        expect(res.body.total).toBe(3);
+        expect(res.body.items).toHaveLength(2);
+      });
+
+      it.each([
+        ['from after to', '?from=2026-02-01T00:00:00Z&to=2026-01-01T00:00:00Z'],
+        ['from equal to to', '?from=2026-02-01T00:00:00Z&to=2026-02-01T00:00:00Z'],
+        ['unparseable from', '?from=yesterday'],
+        ['unparseable to', '?to=not-a-date'],
+        ['search over 200 characters', `?search=${'x'.repeat(201)}`],
+      ])('rejects %s with 400', async (_name, qs) => {
+        await http.get(`/requests/history${qs}`).expect(400);
+      });
+    });
+
     it('keeps history rows when the source request is deleted (FK SET NULL)', async () => {
       const id = await createRequest();
       await classify('linked then deleted', 'billing', id);

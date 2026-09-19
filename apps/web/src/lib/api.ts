@@ -112,6 +112,12 @@ export async function classifyMessage(
 
 export type HistoryFilter = {
   category?: ClassificationCategory;
+  /** Case-insensitive "message contains". */
+  search?: string;
+  /** ISO instant, inclusive. */
+  from?: string;
+  /** ISO instant, exclusive. */
+  to?: string;
   limit?: number;
   offset?: number;
 };
@@ -126,6 +132,9 @@ export type HistoryPage = {
 export async function fetchHistory(filter: HistoryFilter = {}): Promise<HistoryPage> {
   const params = new URLSearchParams();
   if (filter.category) params.set('category', filter.category);
+  if (filter.search) params.set('search', filter.search);
+  if (filter.from) params.set('from', filter.from);
+  if (filter.to) params.set('to', filter.to);
   if (filter.limit != null) params.set('limit', String(filter.limit));
   if (filter.offset != null) params.set('offset', String(filter.offset));
 

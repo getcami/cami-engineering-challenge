@@ -1,5 +1,6 @@
 import {
   BadGatewayException,
+  BadRequestException,
   Inject,
   Injectable,
   Logger,
@@ -72,6 +73,9 @@ export class ClassificationsService {
   }
 
   async history(filter: HistoryFilter): Promise<ClassificationHistoryPage> {
+    if (filter.from && filter.to && filter.from >= filter.to) {
+      throw new BadRequestException('`from` must be earlier than `to`');
+    }
     return this.repository.findHistory(filter);
   }
 

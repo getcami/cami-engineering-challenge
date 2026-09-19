@@ -1,16 +1,18 @@
 'use client';
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   CLASSIFICATION_CATEGORIES,
   ClassificationCategory,
   classifyMessage,
   fetchHistory,
 } from '@/lib/api';
+import { dateRangeToInstants } from '@/lib/history-filter';
 import { invalidateRequestData, queryKeys } from '@/lib/request-cache';
 
 const PAGE_SIZE = 20;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const CATEGORY_STYLES: Record<ClassificationCategory, string> = {
   billing: 'bg-amber-100 text-amber-800',
@@ -22,11 +24,30 @@ const CATEGORY_STYLES: Record<ClassificationCategory, string> = {
 export default function HistoryPage() {
   const queryClient = useQueryClient();
   const [category, setCategory] = useState<ClassificationCategory | ''>('');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [fromDay, setFromDay] = useState('');
+  const [toDay, setToDay] = useState('');
   const [page, setPage] = useState(0);
   const [draft, setDraft] = useState('');
 
+  // Debounce typing so we do not fire a request per keystroke.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(0);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const range = dateRangeToInstants(fromDay, toDay);
+  const filtersActive = Boolean(category || search || fromDay || toDay);
+
   const filter = {
     category: category || undefined,
+    search: search || undefined,
+    from: range.from,
+    to: range.to,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   };
@@ -37,6 +58,8 @@ export default function HistoryPage() {
     queryFn: () => fetchHistory(filter),
     // Keep the old page on screen while the next filter/page loads (no flicker).
     placeholderData: keepPreviousData,
+    // An empty/backwards date range is a user mistake we explain inline, not a request.
+    enabled: !range.invalid,
   });
 
   const classifyMutation = useMutation({
@@ -107,7 +130,66 @@ export default function HistoryPage() {
             ))}
           </select>
         </label>
+
+        <label className="flex min-w-[12rem] flex-1 flex-col gap-1">
+          <span className="font-medium text-slate-700">Message contains</span>
+          <input
+            type="search"
+            className="h-10 rounded border border-slate-300 px-3"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="e.g. invoice"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="font-medium text-slate-700">From</span>
+          <input
+            type="date"
+            className="h-10 rounded border border-slate-300 px-3"
+            value={fromDay}
+            max={toDay || undefined}
+            onChange={(e) => {
+              setFromDay(e.target.value);
+              setPage(0);
+            }}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="font-medium text-slate-700">To</span>
+          <input
+            type="date"
+            className="h-10 rounded border border-slate-300 px-3"
+            value={toDay}
+            min={fromDay || undefined}
+            onChange={(e) => {
+              setToDay(e.target.value);
+              setPage(0);
+            }}
+          />
+        </label>
+
+        <button
+          type="button"
+          disabled={!filtersActive && !searchInput}
+          onClick={() => {
+            setCategory('');
+            setSearchInput('');
+            setSearch('');
+            setFromDay('');
+            setToDay('');
+            setPage(0);
+          }}
+          className="h-10 rounded border border-slate-300 bg-white px-3 disabled:opacity-40"
+        >
+          Clear filters
+        </button>
       </div>
+      {range.invalid && (
+        <p className="text-sm text-red-700">The “From” date must be on or before the “To” date.</p>
+      )}
+
       {historyQuery.isError && !data ? (
         <p className="text-red-700">
           Failed to load history. {historyQuery.error.message}
@@ -116,8 +198,8 @@ export default function HistoryPage() {
         <p className="text-slate-600">Loading history…</p>
       ) : data.items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600">
-          {category
-            ? 'No classifications match this category.'
+          {filtersActive
+            ? 'No classifications match these filters.'
             : 'No classifications yet. Classify a request on the Requests page, or try the box above.'}
         </div>
       ) : (

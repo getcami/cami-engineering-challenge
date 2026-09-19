@@ -1,4 +1,4 @@
-import { BadGatewayException, NotFoundException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { describe, expect, it } from 'vitest';
 import {
   ClassificationHistoryPage,
@@ -9,6 +9,7 @@ import {
 } from '../src/classifications/classifications.repository';
 import { ClassificationsService } from '../src/classifications/classifications.service';
 import { ClassificationResult, ClassifierProvider } from '../src/classifications/classifier.provider';
+import { escapeLike } from '../src/classifications/typeorm-classifications.repository';
 import { RequestDetail, RequestListItem, RequestsRepository } from '../src/requests/requests.repository';
 import { RequestsService } from '../src/requests/requests.service';
 import { RequestStatus } from '../src/requests/customer-request.entity';
@@ -122,11 +123,23 @@ describe('ClassificationsService (with fakes)', () => {
   describe('history()', () => {
     it('passes the filter through to the repository', async () => {
       const { service, repo } = setup();
-      const filter: HistoryFilter = { category: 'sales', requestId: 'req-1', limit: 10, offset: 20 };
+      const filter: HistoryFilter = { category: 'sales', search: 'demo', limit: 10, offset: 20 };
       await service.history(filter);
       expect(repo.lastHistoryFilter).toEqual(filter);
     });
 
+    it('rejects an empty or inverted date range with 400', async () => {
+      const { service } = setup();
+      const at = (iso: string) => new Date(iso);
+      const base = { limit: 10, offset: 0 };
+      await expect(service.history({ ...base, from: at('2026-02-01'), to: at('2026-01-01') })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(service.history({ ...base, from: at('2026-02-01'), to: at('2026-02-01') })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(service.history({ ...base, from: at('2026-01-01'), to: at('2026-02-01') })).resolves.toBeDefined();
+    });
   });
 });
 
@@ -172,5 +185,17 @@ describe('RequestsService (with fakes)', () => {
     const created = await service.create('hello');
     expect((await service.getById(created.id)).message).toBe('hello');
     expect((await service.updateStatus(created.id, 'resolved')).status).toBe('resolved');
+  });
+});
+
+describe('escapeLike', () => {
+  it.each([
+    ['plain', 'plain'],
+    ['50%', '50\\%'],
+    ['a_b', 'a\\_b'],
+    ['back\\slash', 'back\\\\slash'],
+    ['%_\\', '\\%\\_\\\\'],
+  ])('%s -> %s', (input, expected) => {
+    expect(escapeLike(input)).toBe(expected);
   });
 });

@@ -17,6 +17,12 @@ export type NewClassification = Omit<ClassificationRecord, 'id' | 'createdAt'>;
 export type HistoryFilter = {
   category?: ClassificationCategory;
   requestId?: string;
+  /** Case-insensitive "message contains". Plain text: the store escapes wildcards. */
+  search?: string;
+  /** Inclusive lower bound on when the classification ran. */
+  from?: Date;
+  /** Exclusive upper bound (half-open range, so consecutive days never overlap). */
+  to?: Date;
   limit: number;
   offset: number;
 };

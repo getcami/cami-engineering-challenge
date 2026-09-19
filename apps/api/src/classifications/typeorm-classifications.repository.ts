@@ -12,6 +12,11 @@ import {
   STATUS_AFTER_FIRST_CLASSIFICATION,
 } from './classifications.repository';
 
+/** Escape LIKE/ILIKE wildcards so user text is matched literally ("50%" is not "50 anything"). */
+export function escapeLike(text: string): string {
+  return text.replace(/[\\%_]/g, '\\$&');
+}
+
 @Injectable()
 export class TypeOrmClassificationsRepository extends ClassificationsRepository {
   constructor(
@@ -70,6 +75,18 @@ export class TypeOrmClassificationsRepository extends ClassificationsRepository 
     if (filter.requestId) {
       qb.andWhere('c.requestId = :requestId', { requestId: filter.requestId });
     }
+    if (filter.search) {
+      qb.andWhere(`c.message ILIKE :search ESCAPE '\\'`, {
+        search: `%${escapeLike(filter.search)}%`,
+      });
+    }
+    if (filter.from) {
+      qb.andWhere('c.createdAt >= :from', { from: filter.from });
+    }
+    if (filter.to) {
+      qb.andWhere('c.createdAt < :to', { to: filter.to });
+    }
+
     const [rows, total] = await qb.getManyAndCount();
     return {
       items: rows.map((row) => this.toRecord(row)),
