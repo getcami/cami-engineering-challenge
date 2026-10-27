@@ -1,21 +1,24 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
+  Inject,
   Param,
   Patch,
   Post,
   Query,
 } from '@nestjs/common';
 import { RequestsService } from './requests.service';
-import { KeywordClassifier } from './keyword-classifier';
+import { IClassifierProvider, CLASSIFIER_PROVIDER } from './classifier-provider.interface';
 import { RequestStatus } from './customer-request.entity';
 
 @Controller('requests')
 export class RequestsController {
   constructor(
     private readonly requestsService: RequestsService,
-    private readonly classifier: KeywordClassifier,
+    @Inject(CLASSIFIER_PROVIDER)
+    private readonly classifier: IClassifierProvider,
   ) {}
 
   @Get()
@@ -24,11 +27,8 @@ export class RequestsController {
   }
 
   @Get('history')
-  history(@Query('category') _category?: string) {
-    return {
-      items: [],
-      message: 'Classification history is not implemented yet.',
-    };
+  history(@Query('category') category?: string) {
+    return this.requestsService.listHistory(category);
   }
 
   @Get(':id')
@@ -39,7 +39,7 @@ export class RequestsController {
   @Post()
   create(@Body() body: { message?: string }) {
     if (!body?.message || typeof body.message !== 'string') {
-      return { error: 'message is required' };
+      throw new BadRequestException('message is required');
     }
     return this.requestsService.create(body.message);
   }
@@ -47,27 +47,30 @@ export class RequestsController {
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body() body: { status?: RequestStatus }) {
     if (!body?.status) {
-      return { error: 'status is required' };
+      throw new BadRequestException('status is required');
     }
     return this.requestsService.updateStatus(id, body.status);
   }
 
   /**
-   * Classify a customer request. Business rules currently live in the controller.
+   * Task 4: controller is now a thin router.
+   * Validation lives here; classification logic and persistence live in the service.
    */
   @Post('classify')
-  async classify(@Body() body: any) {
+  async classify(@Body() body: { message?: unknown; requestId?: unknown }) {
     const message = body?.message;
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return { error: 'message must be a non-empty string' };
+      throw new BadRequestException('message must be a non-empty string');
+    }
+    if (message.length > 2000) {
+      throw new BadRequestException('message too long');
     }
 
-    if (message.length > 2000) {
-      return { error: 'message too long' };
-    }
+    const requestId =
+      typeof body.requestId === 'string' ? body.requestId : undefined;
 
     const trimmed = message.trim();
-    let result = this.classifier.classify(trimmed);
+    let result = await this.classifier.classify(trimmed);
 
     // Soften confidence for very short messages.
     if (trimmed.split(/\s+/).length < 3 && result.category !== 'unknown') {
@@ -82,21 +85,11 @@ export class RequestsController {
       result = { category: 'unknown', confidence: result.confidence };
     }
 
-    const requestId = body.requestId as string | undefined;
-    if (requestId) {
-      const existing: any = await this.requestsService.getById(requestId);
-      existing.category = result.category;
-      existing.confidence = result.confidence;
-      if (existing.status === 'open') {
-        existing.status = 'in_progress';
-      }
-      await this.requestsService.save(existing);
-    }
-
-    return {
+    return this.requestsService.applyClassification({
+      message: trimmed,
+      requestId,
       category: result.category,
       confidence: result.confidence,
-      requestId: requestId ?? null,
-    };
+    });
   }
 }

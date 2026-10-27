@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { IClassifierProvider, CLASSIFIER_PROVIDER } from './classifier-provider.interface';
 
 export type ClassificationCategory = 'support' | 'sales' | 'billing' | 'unknown';
 
@@ -8,11 +9,12 @@ export type ClassificationResult = {
 };
 
 /**
- * Deterministic keyword classifier. Candidates may introduce a provider
- * interface and swap implementations (including a future LLM provider).
+ * Deterministic keyword classifier.
+ * Registered as the IClassifierProvider — swap this binding in requests.module.ts
+ * to introduce an LLM provider without touching the controller or service.
  */
 @Injectable()
-export class KeywordClassifier {
+export class KeywordClassifier implements IClassifierProvider {
   classify(message: string): ClassificationResult {
     const text = message.toLowerCase();
 
@@ -29,3 +31,5 @@ export class KeywordClassifier {
     return { category: 'unknown', confidence: 0.4 };
   }
 }
+
+export { CLASSIFIER_PROVIDER };
